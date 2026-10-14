@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مارپیچ آرامش</title>
+<style>
+  :root {
+    --bg: #05050f;
+    --ink: #e9e6ff;
+    --ink-soft: #a9a4d6;
+    --line: rgba(190, 180, 255, 0.32);
+    --glass: rgba(16, 14, 44, 0.72);
+    --accent: #b8b0ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg);
+    overflow: hidden; -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: "Vazirmatn", "Segoe UI", Tahoma, system-ui, sans-serif;
+    color: var(--ink);
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  button {
+    font: inherit; color: var(--ink); cursor: pointer;
+    background: rgba(160, 150, 255, 0.08);
+    border: 1px solid var(--line); border-radius: 999px;
+    transition: background .4s, box-shadow .4s, opacity .4s;
+  }
+  button:hover { background: rgba(160, 150, 255, .18); box-shadow: 0 0 26px rgba(150, 140, 255, .3); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  /* ---- menu button ---- */
+  #menuBtn {
+    position: fixed; z-index: 4; top: max(12px, env(safe-area-inset-top)); inset-inline-end: 12px;
+    width: 46px; height: 46px; padding: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    opacity: 0; animation: fadeIn 3s ease 1.5s forwards;
+  }
+  @keyframes fadeIn { to { opacity: .7; } }
+  #menuBtn:hover, #menuBtn[aria-expanded="true"] { opacity: 1; animation: none; }
+  #menuBtn span {
+    display: block; width: 18px; height: 1.5px; background: var(--ink); border-radius: 2px;
+    transition: transform .35s ease, opacity .35s ease;
+  }
+  #menuBtn[aria-expanded="true"] span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  #menuBtn[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+  #menuBtn[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+  #menu {
+    position: fixed; z-index: 3; inset-inline-end: 12px;
+    top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+    width: min(340px, calc(100% - 24px));
+    max-height: calc(100% - 90px); overflow-y: auto;
+    padding: 20px; border-radius: 24px;
+    background: var(--glass); border: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    display: flex; flex-direction: column; gap: 18px;
+    opacity: 0; visibility: hidden; transform: translateY(-8px);
+    transition: opacity .45s ease, transform .45s ease, visibility .45s;
+  }
+  #menu.open { opacity: 1; visibility: visible; transform: none; }
+
+  .row { display: flex; flex-direction: column; gap: 9px; font-size: 15px; }
+  .row > .label { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-soft); }
+  .row > .label output { color: var(--ink); font-size: 14px; }
+  .buttons { display: flex; gap: 8px; }
+  .buttons button { flex: 1; padding: 10px 12px; font-size: 14px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 4px 0; }
+  #palettes { display: flex; gap: 10px; flex-wrap: wrap; }
+  #menu .swatch {
+    width: 34px; height: 34px; padding: 0; border-radius: 50%;
+    border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line);
+  }
+  #menu .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+  .check { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; color: var(--ink-soft); }
+  .check input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
+  #again { padding: 13px; font-size: 18px; letter-spacing: .04em; width: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<button id="menuBtn" type="button" aria-label="منو" aria-expanded="false" aria-controls="menu">
+  <span></span><span></span><span></span>
+</button>
+
+<div id="menu" role="dialog" aria-label="منو و تنظیمات">
+  <div class="row">
+    <div class="label">آهنگ</div>
+    <div class="buttons">
+      <button id="pick" type="button">انتخاب آهنگ</button>
+      <button id="sound" type="button" aria-pressed="true">صدا: روشن</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="label"><span>سرعت</span><output id="speedOut" for="speed"></output></div>
+    <input id="speed" type="range" min="0.1" max="2" step="0.05">
+  </div>
+
+  <div class="row">
+    <div class="label"><span>رنگ‌ها</span><output id="palName"></output></div>
+    <div id="palettes"></div>
+  </div>
+
+  <div class="row">
+    <div class="label"><span>چرخش رنگ</span><output id="hueOut" for="hue"></output></div>
+    <input id="hue" type="range" min="0" max="360" step="1">
+  </div>
+
+  <label class="row check"><input id="drift" type="checkbox"> رنگ‌ها آهسته بچرخند</label>
+
+  <button id="again" type="button">Start</button>
+  <input type="file" id="file" accept="audio/*" hidden>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ---------- Settings ---------- */
+const PALETTES = [
+  { id: 'rainbow', name: 'رنگین‌کمان', start: 0,   span: 360, s: 72, l: 68 },
+  { id: 'night',   name: 'شب',          start: 195, span: 120, s: 70, l: 70 },
+  { id: 'sunset',  name: 'غروب',        start: 335, span: 85,  s: 78, l: 70 },
+  { id: 'forest',  name: 'جنگل',        start: 80,  span: 110, s: 55, l: 66 },
+  { id: 'ocean',   name: 'اقیانوس',     start: 165, span: 80,  s: 68, l: 68 }
+];
+const S = { speed: 0.6, pal: 'rainbow', hue: 0, drift: true };
+try { Object.assign(S, JSON.parse(localStorage.getItem('calmSpiral') || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem('calmSpiral', JSON.stringify(S)); } catch (e) {} };
+const getPal = () => PALETTES.find(p => p.id === S.pal) || PALETTES[0];
+
+/* ---------- Spiral (endless) ----------
+   Points are generated on demand, so the spiral can keep growing forever. */
+const N = 150, STEP = 2.8, TURN = 165 * Math.PI / 180, TAU = Math.PI * 2;
+const P = [[0, 0]];
+let px = 0, py = 0, pa = 0;
+function ensure(n) {
+  while (P.length <= n) {
+    const d = (P.length - 1) * STEP;
+    px += d * Math.cos(pa); py += d * Math.sin(pa);
+    pa = (pa + TURN) % TAU;
+    P.push([px, py]);
+  }
+}
+const Kr = STEP / (2 * Math.sin(TURN / 2));   // radius of the spiral ≈ Kr × (number of segments)
+
+/* ---------- Canvas ---------- */
+const cv = $('c'), ctx = cv.getContext('2d');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W, H, dpr, scale, baseScale;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.width = Math.round(innerWidth * dpr);
+  H = cv.height = Math.round(innerHeight * dpr);
+  baseScale = Math.min(W, H) * 0.46;
+  scale = baseScale / (Kr * N);
+}
+addEventListener('resize', resize); resize();
+
+const stars = Array.from({ length: 90 }, () => ({
+  x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + .3,
+  p: Math.random() * 6.28, s: Math.random() * .4 + .15
+}));
+const motes = Array.from({ length: 34 }, () => ({
+  x: Math.random(), y: Math.random(), r: Math.random() * 2.2 + 1,
+  v: Math.random() * 0.012 + 0.004, p: Math.random() * 6.28, d: Math.random() * 0.3 + 0.2
+}));
+
+/* Endless growth: the spiral keeps drawing outward forever and never restarts.
+   The camera slowly pulls back so the growing tip always stays in view,
+   and the oldest inner part dissolves so the picture never gets cluttered. */
+const RATE = 3;          // segments drawn per simulated second
+const WIN_MAX = 420;     // never keep more than this many segments on screen
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+let simT = 0, last = null;
+const running = true;
+
+function layerHue(i, pal) {
+  const u = i / N;
+  const t = pal.span >= 360 ? u : 1 - Math.abs((u % 2) - 1);   // wrap for rainbow, ping-pong for the others
+  return pal.start + pal.span * t + S.hue + (S.drift ? simT * 2.2 : 0);
+}
+
+function drawSpiral(head, breathe, rot) {
+  if (head <= 0) return;
+  const pal = getPal();
+  const win = Math.min(WIN_MAX, Math.max(N, head * 0.5));
+  const tail = Math.max(0, head - win);
+  const fadeLen = Math.max(14, win * 0.12);
+  ensure(Math.ceil(head) + 1);
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(rot);
+  ctx.scale(scale * breathe, scale * breathe);
+  ctx.lineCap = 'round';
+
+  const i0 = Math.floor(tail), i1 = Math.ceil(head);
+  let tip = null;
+  for (let i = i0; i < i1; i++) {
+    const t0 = Math.max(i, tail), t1 = Math.min(i + 1, head);
+    if (t1 <= t0) continue;
+    const a = P[i], b = P[i + 1];
+    const x0 = a[0] + (b[0] - a[0]) * (t0 - i), y0 = a[1] + (b[1] - a[1]) * (t0 - i);
+    const x1 = a[0] + (b[0] - a[0]) * (t1 - i), y1 = a[1] + (b[1] - a[1]) * (t1 - i);
+    tip = [x1, y1];
+    const fade = smooth(0, fadeLen, (t0 + t1) / 2 - tail);
+    if (fade < 0.01) continue;
+    const hue = ((layerHue((t0 + t1) / 2, pal) % 360) + 360) % 360;
+    ctx.globalAlpha = fade * 0.13;
+    ctx.strokeStyle = `hsl(${hue} ${pal.s - 8}% 62%)`;
+    ctx.lineWidth = 7 * dpr / scale;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.globalAlpha = fade * 0.88;
+    ctx.strokeStyle = `hsl(${hue} ${pal.s}% ${pal.l}%)`;
+    ctx.lineWidth = 1.5 * dpr / scale;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+
+  if (tip && head > 1) {
+    const rr = 16 * dpr / scale;
+    const gg = ctx.createRadialGradient(tip[0], tip[1], 0, tip[0], tip[1], rr);
+    gg.addColorStop(0, 'rgba(255,255,255,.95)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(tip[0], tip[1], rr, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const dt = last === null ? 0 : Math.min(0.1, (ts - last) / 1000);
+  last = ts;
+  if (running) simT += dt * S.speed;
+
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * .7);
+  g.addColorStop(0, '#16133a'); g.addColorStop(.55, '#0a0922'); g.addColorStop(1, '#04040c');
+  ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const now = ts / 1000;
+  ctx.fillStyle = '#dcd8ff';
+  for (const s of stars) {
+    ctx.globalAlpha = .25 + .35 * (0.5 + 0.5 * Math.sin(now * s.s + s.p));
+    ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r * dpr, 0, 6.283); ctx.fill();
+  }
+  for (const m of motes) {
+    if (!reduce) { m.y -= m.v * dt * (0.4 + S.speed * 0.6); if (m.y < -0.05) { m.y = 1.05; m.x = Math.random(); } }
+    const x = (m.x + Math.sin(now * 0.15 + m.p) * 0.012) * W, y = m.y * H, r = m.r * 5 * dpr;
+    const mg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    mg.addColorStop(0, 'rgba(210,205,255,.55)'); mg.addColorStop(1, 'rgba(210,205,255,0)');
+    ctx.globalAlpha = m.d * (0.6 + 0.4 * Math.sin(now * 0.4 + m.p));
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  }
+
+  const breathe = reduce ? 1 : 1 + 0.014 * Math.sin(simT * 2 * Math.PI / 10);
+  const rot = reduce ? 0 : simT * 0.016;
+  const head = simT * RATE;
+  const hcam = Math.pow(Math.pow(N, 4) + Math.pow(head, 4), 0.25);   // stays put at first, then eases into pulling back
+  scale = baseScale / (Kr * hcam);
+  drawSpiral(head, breathe, rot);
+}
+requestAnimationFrame(frame);
+
+/* ---------- Ambient music (generated live; used only if there is no song) ---------- */
+let ac, master, bus, muted = false, chordIdx = 0, nextChord = 0, nextBell = 0, timer, ambientOn = false;
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const CHORDS = [
+  [48, 55, 59, 62, 64], [45, 52, 55, 60, 64],
+  [41, 48, 57, 60, 64, 67], [43, 50, 55, 59, 62, 64]
+];
+const BELLS = [72, 74, 76, 79, 81, 84, 79, 76];
+
+function initAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain();
+  master.gain.setValueAtTime(0, ac.currentTime);
+  master.gain.linearRampToValueAtTime(muted ? 0 : 0.85, ac.currentTime + 6);
+  master.connect(ac.destination);
+
+  const len = ac.sampleRate * 6, buf = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+  }
+  const conv = ac.createConvolver(); conv.buffer = buf;
+  const wet = ac.createGain(); wet.gain.value = 0.75;
+  const dry = ac.createGain(); dry.gain.value = 0.45;
+  bus = ac.createGain();
+  bus.connect(dry); dry.connect(master);
+  bus.connect(conv); conv.connect(wet); wet.connect(master);
+
+  nextChord = ac.currentTime + 0.2;
+  nextBell = ac.currentTime + 5;
+  ambientOn = true;
+  schedule();
+  timer = setInterval(schedule, 1000);
+}
+
+function stopAmbient() {
+  if (!ambientOn) return;
+  ambientOn = false;
+  clearInterval(timer);
+  const t = ac.currentTime, old = ac;
+  master.gain.cancelScheduledValues(t);
+  master.gain.setValueAtTime(master.gain.value, t);
+  master.gain.linearRampToValueAtTime(0, t + 2);
+  setTimeout(() => old.close(), 2600);
+}
+
+function playChord(notes, t, dur) {
+  const lp = ac.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 850; lp.Q.value = 0.3;
+  lp.connect(bus);
+  notes.forEach(m => {
+    [['sine', 0], ['triangle', 6], ['sine', -6]].forEach(([type, cents]) => {
+      const o = ac.createOscillator();
+      o.type = type; o.frequency.value = mtof(m); o.detune.value = cents;
+      const g = ac.createGain();
+      const peak = (type === 'triangle' ? 0.012 : 0.03) / Math.sqrt(notes.length / 4);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(peak, t + 3.2);
+      g.gain.setValueAtTime(peak, t + dur - 4);
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(g); g.connect(lp);
+      o.start(t); o.stop(t + dur + 0.1);
+    });
+  });
+}
+
+function bell(t) {
+  const f = mtof(BELLS[Math.floor(Math.random() * BELLS.length)]);
+  const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+  if (pan) { pan.pan.value = Math.random() * 1.2 - 0.6; pan.connect(bus); }
+  const out = pan || bus;
+  [[1, 0.07, 5], [2.0, 0.018, 3], [3.01, 0.006, 2]].forEach(([mul, vol, decay]) => {
+    const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f * mul;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t + decay + 0.1);
+  });
+}
+
+function schedule() {
+  const now = ac.currentTime;
+  while (nextChord < now + 3) { playChord(CHORDS[chordIdx % CHORDS.length], nextChord, 11); chordIdx++; nextChord += 8; }
+  while (nextBell < now + 3) { bell(nextBell); nextBell += 2.5 + Math.random() * 4; }
+}
+
+/* ---------- Your own song ----------
+   Put a file named song.mp3 next to this HTML file (or use "انتخاب آهنگ" in the menu).
+   The first play begins at FIRST_START seconds; every repeat begins at 0:00, forever. */
+const DEFAULT_SONG = 'song.mp3';
+const FIRST_START = 37;
+const song = new Audio();
+song.preload = 'auto';
+song.loop = false;
+let usingSong = false, songPlaying = false;
+
+function seekFirst() {
+  song.currentTime = (song.duration && FIRST_START < song.duration) ? FIRST_START : 0;
+}
+function playFromFirst() {
+  usingSong = true;
+  stopAmbient();
+  song.muted = muted;
+  const go = () => { seekFirst(); song.play().catch(() => {}); };   // if the browser blocks it, the first tap starts it
+  if (song.readyState >= 1) go();
+  else song.addEventListener('loadedmetadata', go, { once: true });
+}
+song.addEventListener('playing', () => { songPlaying = true; });
+song.addEventListener('ended', () => { song.currentTime = 0; song.play().catch(() => {}); });
+
+function startAmbientFallback() {
+  if (usingSong || ambientOn) return;
+  initAudio();
+}
+
+/* Browsers only allow sound after a touch/click, so the very first tap anywhere wakes the audio. */
+function wakeAudio() {
+  if (ac && ac.state === 'suspended') ac.resume();
+  if (usingSong && !songPlaying) { song.muted = muted; seekFirst(); song.play().catch(() => {}); }
+}
+['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, wakeAudio, { passive: true }));
+
+/* ---------- Auto start (no start screen) ---------- */
+song.src = DEFAULT_SONG;
+song.addEventListener('loadedmetadata', () => { if (!usingSong) playFromFirst(); }, { once: true });
+song.addEventListener('error', startAmbientFallback, { once: true });
+song.load();
+
+/* ---------- UI ---------- */
+const menu = $('menu'), menuBtn = $('menuBtn');
+function setMenu(open) {
+  menu.classList.toggle('open', open);
+  menuBtn.setAttribute('aria-expanded', String(open));
+}
+menuBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+addEventListener('keydown', e => { if (e.key === 'Escape') setMenu(false); });
+document.addEventListener('pointerdown', e => {
+  if (menu.classList.contains('open') && !menu.contains(e.target) && !menuBtn.contains(e.target)) setMenu(false);
+});
+
+// Start: draw again from the beginning (and the song from its first-play point)
+$('again').addEventListener('click', () => {
+  simT = 0;
+  if (usingSong) { seekFirst(); song.play().catch(() => {}); }
+  setMenu(false);
+});
+
+$('pick').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', () => {
+  const f = $('file').files && $('file').files[0];
+  if (!f) return;
+  usingSong = false; songPlaying = false;
+  song.pause();
+  song.src = URL.createObjectURL(f);
+  song.load();
+  playFromFirst();
+});
+$('sound').addEventListener('click', () => {
+  muted = !muted;
+  song.muted = muted;
+  if (ambientOn) {
+    const t = ac.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(muted ? 0 : 0.85, t + 1.5);
+  }
+  $('sound').textContent = muted ? 'صدا: خاموش' : 'صدا: روشن';
+  $('sound').setAttribute('aria-pressed', String(!muted));
+});
+
+const speed = $('speed');
+function refreshSpeed() { speed.value = S.speed; $('speedOut').textContent = '×' + Number(Number(S.speed).toFixed(2)); }
+speed.addEventListener('input', () => { S.speed = parseFloat(speed.value); refreshSpeed(); save(); });
+
+const palWrap = $('palettes');
+PALETTES.forEach(p => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'swatch'; b.title = p.name; b.dataset.id = p.id;
+  b.setAttribute('aria-label', p.name);
+  const stops = [0, .25, .5, .75, 1].map(f => `hsl(${(p.start + p.span * f) % 360} ${p.s}% ${p.l}%)`).join(',');
+  b.style.background = `linear-gradient(135deg, ${stops})`;
+  b.addEventListener('click', () => { S.pal = p.id; refreshPal(); save(); });
+  palWrap.appendChild(b);
+});
+function refreshPal() {
+  [...palWrap.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === S.pal)));
+  $('palName').textContent = getPal().name;
+}
+const hue = $('hue');
+function refreshHue() { hue.value = S.hue; $('hueOut').textContent = S.hue + '°'; }
+hue.addEventListener('input', () => { S.hue = parseInt(hue.value, 10); refreshHue(); save(); });
+$('drift').addEventListener('change', e => { S.drift = e.target.checked; save(); });
+
+refreshSpeed(); refreshPal(); refreshHue(); $('drift').checked = !!S.drift;
+</script>
+</body>
+</html>
